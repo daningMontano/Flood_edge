@@ -1,0 +1,68 @@
+# ======================
+# Python
+# ======================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+
+# ======================
+# Entornos
+# ======================
+.venv/
+venv/
+env/
+ENV/
+conda-env/
+.env
+
+# ======================
+# VS Code
+# ======================
+.vscode/*
+!.vscode/launch.json
+!.vscode/settings.json
+
+# ======================
+# Jupyter / notebooks
+# ======================
+.ipynb_checkpoints/
+
+# ======================
+# Datos y salidas (NO versionar)
+# ======================
+data/samples/output*.jpg
+data/samples/output*.png
+data/samples/output*.tif
+data/samples/*.mp4
+data/samples/*.avi
+data/samples/*.log
+
+# ======================
+# Logs
+# ======================
+*.log
+
+# ======================
+# Modelos (según criterio)
+# ======================
+models/*.onnx
+models/*.pt
+models/*.pth
+
+# ======================
+# OS
+# ======================
+.DS_Store
+Thumbs.db
+
+# ======================
+# Compilados / temporales
+# ======================
+build/
+dist/
+*.tmp
+*.swp

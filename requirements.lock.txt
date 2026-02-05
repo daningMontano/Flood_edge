@@ -1,0 +1,21 @@
+asttokens==2.4.1
+coloredlogs @ file:///home/conda/feedstock_root/build_artifacts/coloredlogs_1733927977068/work
+comm==0.2.1
+flatbuffers @ file:///home/conda/feedstock_root/build_artifacts/python-flatbuffers_1758880282135/work
+humanfriendly @ file:///D:/bld/humanfriendly_1733927963288/work
+ipython==8.21.0
+jedi==0.19.1
+jupyter_core==5.7.1
+matplotlib-inline==0.1.6
+mpmath @ file:///home/conda/feedstock_root/build_artifacts/mpmath_1733302684489/work
+numpy @ file:///D:/bld/bld/rattler-build_numpy_1770098404/work/dist/numpy-2.4.2-cp311-cp311-win_amd64.whl#sha256=1dc64abcea7678d915a259496c0283ff327afeed3b11d508be6117caf2623ad7
+onnxruntime-gpu @ file:///C:/bld/onnxruntime_1765362280553/work/build-ci/Release/dist/onnxruntime_gpu-1.22.2-cp311-cp311-win_amd64.whl#sha256=b9bcf67650bab97c6ce1c146b70853e88203953e9928143397fc89a9aeef496e
+opencv-python-headless==4.13.0.90
+packaging @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_packaging_1769093650/work
+protobuf @ file:///D:/bld/protobuf_1769754646645/work/bazel-bin/python/dist/protobuf-6.33.5-cp311-abi3-win_amd64.whl#sha256=f2d68d836d1de738a7db9d24d122761ac0904ab33aac9fc10d49f22c1599a8b8
+pyreadline3 @ file:///D:/bld/pyreadline3_1756887680161/work
+python-dotenv @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_python-dotenv_1761503229/work
+PyYAML @ file:///D:/bld/pyyaml_1770223251282/work
+stack-data==0.6.3
+sympy @ file:///home/conda/feedstock_root/build_artifacts/sympy_1745946057943/work
+xlrd==2.0.1
