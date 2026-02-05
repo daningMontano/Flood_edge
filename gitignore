@@ -52,6 +52,7 @@ data/samples/*.log
 models/*.onnx
 models/*.pt
 models/*.pth
+models/*.onnx.data
 
 # ======================
 # OS
