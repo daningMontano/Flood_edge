@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+
 from src.inference.detector import FloodDetectorEdge
 from src.preprocess.image import preprocess_image
 from src.postprocess.mask import (
@@ -7,6 +9,8 @@ from src.postprocess.mask import (
 from src.io.image_loader import load_image
 from src.io.points_loader import load_points_csv
 from src.geometry.mask_points import labeled_points_in_mask
+from src.actions.telegram_alert import send_alert
+
 import cv2
 
 MODEL_PATH = "models/flood_segmentation_dinov3.onnx"
@@ -14,6 +18,9 @@ POINTS_PATH = "data/alert_points/points.csv"
 
 
 def main(image_path: str, output_path: str):
+    # Cargar variables desde .env
+    load_dotenv()
+
     # 1) Inicializar modelo
     detector = FloodDetectorEdge(MODEL_PATH)
 
@@ -30,13 +37,13 @@ def main(image_path: str, output_path: str):
     prob_map = output[0, 0]          # (H, W)
     mask = postprocess_mask(prob_map, image.shape[:2])
 
-    # 6) Cargar puntos desde CSV (IO)
+    # 6) Cargar puntos desde CSV
     points = load_points_csv(POINTS_PATH)
 
-    # 7) Geometría: puntos dentro de la máscara
+    # 7) Puntos dentro de la máscara
     points_inside = labeled_points_in_mask(mask, points)
 
-    # 8) Visualización (postprocess)
+    # 8) Overlay (imagen + máscara + puntos)
     result = overlay_mask_with_points(
         image=image,
         binary_mask=mask,
@@ -44,13 +51,22 @@ def main(image_path: str, output_path: str):
         points_inside=points_inside
     )
 
-    # 9) Guardar resultado
+    # 9) Guardar salida
     cv2.imwrite(output_path, result)
 
-    # 10) Log mínimo
+    # 10) Acción: enviar alerta si corresponde (ALTO o MEDIO)
+    try:
+        send_alert(output_path, points_inside)
+    except Exception as e:
+        print(f"[WARN] Telegram falló: {e}")
+
+    # 11) Log mínimo
     print("Puntos dentro de la inundación:")
     for p in points_inside:
-        print(f"- {p['label']} ({p['x']}, {p['y']})")
+        label = p.get("label") or p.get("Label") or ""
+        x = p.get("x") or p.get("X")
+        y = p.get("y") or p.get("Y")
+        print(f"- {label} ({x}, {y})")
 
 
 if __name__ == "__main__":
