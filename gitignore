@@ -53,6 +53,7 @@ models/*.onnx
 models/*.pt
 models/*.pth
 models/*.onnx.data
+*.onnx.data
 
 # ======================
 # OS

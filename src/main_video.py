@@ -13,8 +13,8 @@ from src.actions.telegram_alert import send_alert
 
 
 MODEL_PATH = "models/flood_segmentation_dinov3.onnx"
-POINTS_VIDEO_PATH = "data/alert_points/points_video.csv"
-VIDEO_PATH = "data/samples/video_test2.mp4"
+POINTS_VIDEO_PATH = "data/alert_points/points_video3.csv"
+VIDEO_PATH = "data/samples/video_test3.mp4"
 OUTPUT_DIR = "data/samples/video_out"
 
 
@@ -52,7 +52,7 @@ def main():
 
     last_severity = "bajo"  # estado anterior observado
 
-    for frame_idx, frame in iter_video_frames(VIDEO_PATH, every_n=3):
+    for frame_idx, frame in iter_video_frames(VIDEO_PATH, every_n=4):
         input_tensor = preprocess_image(frame)
         output = detector.predict(input_tensor)
 
