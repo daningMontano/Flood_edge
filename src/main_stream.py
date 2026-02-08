@@ -156,7 +156,7 @@ def main():
     source = build_rtsp_url()
     source_tcp = source + ("&rtsp_transport=tcp" if "?" in source else "?rtsp_transport=tcp")
 
-    every_n = 3                # Procesar cada N frames
+    every_n = 30                # Procesar cada N frames
     last_severity = "bajo"     # Estado previo
     frame_idx = -1
 

@@ -12,7 +12,7 @@ from src.actions.telegram_alert import send_alert
 
 
 MODEL_PATH = "models/flood_segmentation_dinov3.onnx"
-POINTS_VIDEO_PATH = "data/alert_points/points_video3.csv"
+POINTS_VIDEO_PATH = "data/alert_points/points_video4.csv"
 VIDEO_PATH = "data/samples/video_test3.mp4"
 
 
@@ -44,7 +44,7 @@ def main():
 
     last_severity = "bajo"
 
-    for frame_idx, frame in iter_video_frames(VIDEO_PATH, every_n=3):  # <- 3 si esa es tu regla
+    for frame_idx, frame in iter_video_frames(VIDEO_PATH, every_n=30):  # <- 3 si esa es tu regla
         input_tensor = preprocess_image(frame)
         output = detector.predict(input_tensor)
 
@@ -80,3 +80,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
