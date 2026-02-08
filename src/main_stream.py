@@ -1,15 +1,28 @@
 # src/main_stream.py
 # ------------------------------------------------------------
-# Stream RTSP desde cámara Amcrest, ejecuta segmentación de inundación
-# cada N frames, superpone máscara + puntos de severidad y envía
-# alertas por Telegram solo cuando cambia la severidad.
+# Stream RTSP desde cámara Amcrest.
+# - Ejecuta segmentación de inundación cada N frames.
+# - Superpone máscara + puntos de severidad (siempre visibles).
+# - Envía alertas por Telegram solo cuando cambia la severidad.
+# - Guarda métricas por frame procesado en CSV: CPU, RAM, tiempo de inferencia.
 # ------------------------------------------------------------
 
+import os
+import csv
 import time
+from datetime import datetime, timezone
+from urllib.parse import quote  # Para codificar usuario/clave RTSP
+
 import cv2
 from dotenv import load_dotenv
-import os
-from urllib.parse import quote  # Para codificar usuario/clave RTSP
+
+# psutil es obligatorio para métricas CPU/RAM
+try:
+    import psutil
+except ImportError as e:
+    raise ImportError(
+        "Falta psutil. Instala con: pip install psutil (o agrégalo a tu environment.yml)"
+    ) from e
 
 # --- Módulos internos del proyecto ---
 from src.inference.detector import FloodDetectorEdge
@@ -21,7 +34,10 @@ from src.actions.telegram_alert import send_alert
 
 # --- Rutas de recursos ---
 MODEL_PATH = "models/flood_segmentation_dinov3.onnx"
-POINTS_PATH = "data/alert_points/points_video3.csv"
+POINTS_PATH = "data/alert_points/points_video4.csv"
+
+# --- Métricas (CSV) ---
+DEFAULT_METRICS_CSV_PATH = "metrics/metrics_stream.csv"
 
 
 # ------------------------------------------------------------
@@ -44,6 +60,11 @@ def get_severity(points_inside) -> str:
 # Construye URL RTSP desde variables de entorno (.env)
 # Incluye URL-encoding para evitar errores por caracteres
 # especiales en usuario/contraseña
+#
+# Nota crítica para tus puntos:
+# - Si tus puntos (CSV) fueron definidos sobre el stream principal (HD/4K),
+#   NO uses subtype=1 (substream) porque cambia la resolución y los puntos quedarán fuera.
+# - Por eso el default aquí usa subtype=0 (main stream).
 # ------------------------------------------------------------
 def build_rtsp_url() -> str:
     rtsp_user = os.getenv("RTSP_USER", "")
@@ -54,7 +75,7 @@ def build_rtsp_url() -> str:
     # Ruta típica Amcrest / Dahua
     rtsp_path = os.getenv(
         "RTSP_PATH",
-        "/cam/realmonitor?channel=1&subtype=1"  # substream recomendado
+        "/cam/realmonitor?channel=1&subtype=0"  # main stream (más probable que coincida con tus puntos)
     )
 
     user_enc = quote(rtsp_user, safe="")
@@ -74,6 +95,9 @@ def open_capture(source: str) -> cv2.VideoCapture:
     # Reduce latencia interna del buffer
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
+    # En algunos builds ayuda a forzar conversión a BGR
+    cap.set(cv2.CAP_PROP_CONVERT_RGB, 1)
+
     if not cap.isOpened():
         raise RuntimeError(f"No se pudo abrir la cámara/stream: {source}")
     return cap
@@ -82,7 +106,7 @@ def open_capture(source: str) -> cv2.VideoCapture:
 # ------------------------------------------------------------
 # Reabre el stream si se cae
 # ------------------------------------------------------------
-def reopen_capture(source: str, wait_s: float = 0.5) -> cv2.VideoCapture:
+def reopen_capture(source: str, wait_s: float = 0.8) -> cv2.VideoCapture | None:
     time.sleep(wait_s)
     try:
         return open_capture(source)
@@ -91,22 +115,50 @@ def reopen_capture(source: str, wait_s: float = 0.5) -> cv2.VideoCapture:
 
 
 # ------------------------------------------------------------
+# Asegura que el frame sea BGR (3 canales).
+# Si el stream llega en escala de grises, lo convierte a BGR para
+# que el overlay y los colores de puntos funcionen correctamente.
+# ------------------------------------------------------------
+def ensure_bgr(frame):
+    if frame is None:
+        return None
+
+    # Grayscale (H, W)
+    if frame.ndim == 2:
+        return cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+
+    # (H, W, 1)
+    if frame.ndim == 3 and frame.shape[2] == 1:
+        return cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+
+    # (H, W, 4) -> BGRA to BGR
+    if frame.ndim == 3 and frame.shape[2] == 4:
+        return cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+
+    return frame
+
+
+# ------------------------------------------------------------
 # Dibuja TODOS los puntos de severidad del CSV sobre la imagen
 # (independiente de si están dentro o fuera de la máscara)
-# Sirve para verificar visualmente su ubicación
+# Sirve para verificar visualmente su ubicación.
+#
+# Importante: NO se reescalan puntos aquí.
+# Los puntos se asumen en coordenadas de píxel del mismo tamaño
+# que el frame del stream.
 # ------------------------------------------------------------
 def draw_severity_points(image, points):
     h, w = image.shape[:2]
+    drawn = 0
 
     for p in points:
         if "x" not in p or "y" not in p:
             continue
 
-        # Coordenadas del punto
-        x = int(float(p["x"]))
-        y = int(float(p["y"]))
+        x = int(p["x"])
+        y = int(p["y"])
 
-        # Evita dibujar fuera del frame
+        # Evita dibujar fuera del frame (si no coincide la resolución)
         if not (0 <= x < w and 0 <= y < h):
             continue
 
@@ -136,7 +188,39 @@ def draw_severity_points(image, points):
             (255, 255, 255), 2, cv2.LINE_AA
         )
 
-    return image
+        drawn += 1
+
+    return image, drawn
+
+
+# ------------------------------------------------------------
+# Inicializa el CSV de métricas:
+# - Crea el directorio si no existe
+# - Escribe header si el archivo no existe
+# ------------------------------------------------------------
+def init_metrics_csv(path: str):
+    out_dir = os.path.dirname(path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+
+    file_exists = os.path.exists(path)
+    f = open(path, mode="a", newline="", encoding="utf-8")
+    writer = csv.writer(f)
+
+    if not file_exists:
+        writer.writerow([
+            "timestamp_utc",
+            "frame_idx",
+            "severity",
+            "points_inside",
+            "inference_ms",
+            "cpu_percent",
+            "process_rss_mb",
+            "system_ram_percent",
+        ])
+        f.flush()
+
+    return f, writer
 
 
 # ------------------------------------------------------------
@@ -145,6 +229,14 @@ def draw_severity_points(image, points):
 def main():
     # Carga variables del archivo .env
     load_dotenv()
+
+    # Ruta del CSV de métricas (configurable por env)
+    metrics_csv_path = os.getenv("METRICS_CSV_PATH", DEFAULT_METRICS_CSV_PATH)
+
+    # Inicializa métricas
+    process = psutil.Process(os.getpid())
+    psutil.cpu_percent(interval=None)  # warm-up para evitar 0.0 al primer registro
+    metrics_file, metrics_writer = init_metrics_csv(metrics_csv_path)
 
     # Inicializa modelo de segmentación (ONNX)
     detector = FloodDetectorEdge(MODEL_PATH)
@@ -156,34 +248,46 @@ def main():
     source = build_rtsp_url()
     source_tcp = source + ("&rtsp_transport=tcp" if "?" in source else "?rtsp_transport=tcp")
 
-    every_n = 30                # Procesar cada N frames
-    last_severity = "bajo"     # Estado previo
+    every_n = int(os.getenv("STREAM_EVERY_N", "30"))  # Procesar cada N frames
+    last_severity = "bajo"  # Estado previo
     frame_idx = -1
 
     # Abre stream
-    cap = open_capture(source_tcp)
+    cap = reopen_capture(source_tcp, wait_s=0.0) or reopen_capture(source, wait_s=0.0)
+    if cap is None:
+        raise RuntimeError("No se pudo abrir el stream RTSP (ni con TCP ni sin TCP).")
 
     # Control de reconexión
     fail_reads = 0
-    max_fail_reads = 30
+    max_fail_reads = int(os.getenv("STREAM_MAX_FAIL_READS", "30"))
 
     # Ventana de visualización (solo frames procesados)
     window_name = "Prediction Frame (processed only)"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
+    # Para mostrar un warning si los puntos no coinciden con la resolución
+    warned_points_mismatch = False
+
     try:
         while True:
+            # Si el stream se cayó y cap quedó inválido, reintenta abrir
+            if cap is None or not cap.isOpened():
+                cap = reopen_capture(source_tcp) or reopen_capture(source)
+                if cap is None:
+                    time.sleep(1.0)
+                    continue
+
             ok, frame = cap.read()
 
             # Manejo de caída del stream
             if not ok or frame is None:
                 fail_reads += 1
                 if fail_reads >= max_fail_reads:
-                    cap.release()
+                    try:
+                        cap.release()
+                    except Exception:
+                        pass
                     cap = reopen_capture(source_tcp) or reopen_capture(source)
-                    if cap is None:
-                        time.sleep(1.0)
-                        continue
                     fail_reads = 0
                 time.sleep(0.05)
                 continue
@@ -195,9 +299,17 @@ def main():
             if frame_idx % every_n != 0:
                 continue
 
-            # ---------------- INFERENCIA ----------------
+            # Asegura frame BGR (evita overlays que fallen o se vean mal)
+            frame = ensure_bgr(frame)
+
+            # ---------------- INFERENCIA (timed) ----------------
+            t0 = time.perf_counter()
+
             input_tensor = preprocess_image(frame)
             output = detector.predict(input_tensor)
+
+            t1 = time.perf_counter()
+            inference_ms = (t1 - t0) * 1000.0
 
             # Mapa de probabilidad → máscara binaria
             prob_map = output[0, 0]
@@ -206,7 +318,7 @@ def main():
             # Puntos que caen dentro de la máscara
             points_inside = labeled_points_in_mask(mask, points)
 
-            # Superposición máscara + puntos internos
+            # Superposición máscara + puntos internos (color por severidad)
             overlay = overlay_mask_with_points(
                 image=frame,
                 binary_mask=mask,
@@ -214,8 +326,8 @@ def main():
                 points_inside=points_inside
             )
 
-            # Dibuja SIEMPRE todos los puntos del CSV
-            overlay = draw_severity_points(overlay, points)
+            # Dibuja SIEMPRE todos los puntos del CSV (para ver su ubicación)
+            overlay, drawn_points = draw_severity_points(overlay, points)
 
             # Severidad global del frame
             current_severity = get_severity(points_inside)
@@ -223,7 +335,7 @@ def main():
             # Texto informativo
             cv2.putText(
                 overlay,
-                f"Severity: {current_severity.upper()} | Frame {frame_idx} | Inside {len(points_inside)}",
+                f"Severity: {current_severity.upper()} | Frame {frame_idx} | Inside {len(points_inside)} | Drawn {drawn_points}",
                 (20, 40),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.9,
@@ -231,6 +343,20 @@ def main():
                 2,
                 cv2.LINE_AA
             )
+
+            # Warning visual si NO se dibuja ningún punto (típicamente por resolución distinta)
+            if (not warned_points_mismatch) and drawn_points == 0 and len(points) > 0:
+                warned_points_mismatch = True
+                cv2.putText(
+                    overlay,
+                    "WARNING: 0 points drawn. Check RTSP subtype/resolution vs points CSV.",
+                    (20, 80),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (0, 0, 255),
+                    2,
+                    cv2.LINE_AA
+                )
 
             # Mostrar SOLO el frame procesado
             cv2.imshow(window_name, overlay)
@@ -242,24 +368,41 @@ def main():
             # Enviar alerta solo si cambia la severidad
             if current_severity != last_severity:
                 if current_severity in ("medio", "alto"):
-                    try:
-                        send_alert(overlay, points_inside)
-                    except Exception as e:
-                        print(f"[WARN] Telegram falló: {e}")
+                    # send_alert acepta np.ndarray (imagen BGR en memoria)
+                    send_alert(overlay, points_inside)
                 last_severity = current_severity
 
-            # Log de depuración
-            print(
-                f"frame={frame_idx} "
-                f"severity={current_severity} "
-                f"points_inside={len(points_inside)}"
-            )
+            # ---------------- MÉTRICAS -> CSV ----------------
+            timestamp_utc = datetime.now(timezone.utc).isoformat()
+
+            # CPU: porcentaje desde la última llamada (aprox. durante este ciclo)
+            cpu_percent = psutil.cpu_percent(interval=None)
+
+            # RAM:
+            process_rss_mb = process.memory_info().rss / (1024.0 * 1024.0)
+            system_ram_percent = psutil.virtual_memory().percent
+
+            metrics_writer.writerow([
+                timestamp_utc,
+                frame_idx,
+                current_severity,
+                len(points_inside),
+                round(inference_ms, 3),
+                round(cpu_percent, 2),
+                round(process_rss_mb, 2),
+                round(system_ram_percent, 2),
+            ])
+            metrics_file.flush()
 
             # Liberar referencias grandes
             del overlay, mask, output, input_tensor
 
     finally:
         # Liberación limpia de recursos
+        try:
+            metrics_file.close()
+        except Exception:
+            pass
         try:
             cap.release()
         except Exception:
