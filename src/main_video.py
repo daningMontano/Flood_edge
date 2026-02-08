@@ -1,6 +1,5 @@
 # src/main_video.py
 import os
-import cv2
 from dotenv import load_dotenv
 
 from src.inference.detector import FloodDetectorEdge
@@ -15,15 +14,9 @@ from src.actions.telegram_alert import send_alert
 MODEL_PATH = "models/flood_segmentation_dinov3.onnx"
 POINTS_VIDEO_PATH = "data/alert_points/points_video3.csv"
 VIDEO_PATH = "data/samples/video_test3.mp4"
-OUTPUT_DIR = "data/samples/video_out"
 
 
 def get_severity(points_inside) -> str:
-    """
-    Retorna: 'alto', 'medio', 'bajo'
-    Regla de prioridad: alto > medio > bajo
-    Si no hay puntos dentro, retorna 'bajo' (resetea estado).
-    """
     has_medium = False
     has_low = False
 
@@ -45,14 +38,13 @@ def get_severity(points_inside) -> str:
 
 def main():
     load_dotenv()
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     detector = FloodDetectorEdge(MODEL_PATH)
     points = load_points_csv(POINTS_VIDEO_PATH)
 
-    last_severity = "bajo"  # estado anterior observado
+    last_severity = "bajo"
 
-    for frame_idx, frame in iter_video_frames(VIDEO_PATH, every_n=4):
+    for frame_idx, frame in iter_video_frames(VIDEO_PATH, every_n=3):  # <- 3 si esa es tu regla
         input_tensor = preprocess_image(frame)
         output = detector.predict(input_tensor)
 
@@ -68,29 +60,22 @@ def main():
             points_inside=points_inside
         )
 
-        out_path = os.path.join(OUTPUT_DIR, f"overlay_{frame_idx}.jpg")
-        cv2.imwrite(out_path, overlay)
-
         current_severity = get_severity(points_inside)
 
-        # Regla: solo enviar si cambia la categoría
-        # - Si cambia a medio: enviar una vez
-        # - Si sigue en medio: no enviar
-        # - Si cambia a alto: enviar una vez
-        # - Si sigue en alto: no enviar
-        # - Si baja a medio: vuelve a enviar (porque cambió)
-        # - Si baja a bajo: no envía, pero actualiza estado (permite re-disparo cuando suba)
+        # Solo enviar si cambia y es medio/alto
         if current_severity != last_severity:
             if current_severity in ("medio", "alto"):
                 try:
-                    send_alert(out_path, points_inside)  # caption automático: "alerta media" o "alerta alta"
+                    send_alert(overlay, points_inside)  # <- imagen en RAM
                 except Exception as e:
                     print(f"[WARN] Telegram falló: {e}")
 
             last_severity = current_severity
 
-        # Log mínimo por frame procesado
         print(f"frame={frame_idx} severity={current_severity} points_inside={len(points_inside)}")
+
+        # liberar referencias grandes (opcional)
+        del overlay, mask, output, input_tensor
 
 
 if __name__ == "__main__":
