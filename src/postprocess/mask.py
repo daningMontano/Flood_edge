@@ -29,7 +29,7 @@ def overlay_mask_with_points(
     binary_mask: np.ndarray,
     points_all: Iterable[dict],
     points_inside: Optional[Iterable[dict]] = None,
-    radius: int = 9
+    radius: int = 3
 ) -> np.ndarray:
     """
     Superpone la máscara y dibuja puntos según nivel (siempre mismo color):

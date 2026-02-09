@@ -1,0 +1,4 @@
+timestamp_utc,source,video_path,every_n,frame_idx,severity,points_inside,inference_ms,system_cpu_percent,process_cpu_percent,process_rss_mb,system_ram_percent,alert_sent,alert_error
+2026-02-09T00:06:18.635417+00:00,video,data/samples/video_test3.mp4,300,0,bajo,0,4781.101,95.1,347.9,412.918,71.7,0,
+2026-02-09T00:06:31.342507+00:00,video,data/samples/video_test3.mp4,300,300,bajo,0,4355.995,69.7,259.2,574.195,76.1,0,
+2026-02-09T00:06:45.030237+00:00,video,data/samples/video_test3.mp4,300,600,medio,1,4270.307,63.0,241.3,578.031,75.8,1,

@@ -1,0 +1,6 @@
+timestamp_utc,source,video_path,every_n,frame_idx,severity,points_inside,inference_ms,system_cpu_percent,process_cpu_percent,process_rss_mb,system_ram_percent,alert_sent,alert_error
+2026-02-09T00:04:21.195315+00:00,video,data/samples/video_test3.mp4,160,0,bajo,0,5060.305,95.6,334.6,412.93,74.3,0,
+2026-02-09T00:04:29.939905+00:00,video,data/samples/video_test3.mp4,160,160,bajo,0,4701.941,78.1,292.0,573.434,77.2,0,
+2026-02-09T00:04:39.454854+00:00,video,data/samples/video_test3.mp4,160,320,bajo,0,4397.106,74.1,279.1,574.16,76.4,0,
+2026-02-09T00:04:49.000008+00:00,video,data/samples/video_test3.mp4,160,480,bajo,0,4805.002,77.0,283.8,574.879,77.0,0,
+2026-02-09T00:05:01.364532+00:00,video,data/samples/video_test3.mp4,160,640,medio,1,4413.375,54.5,206.6,577.914,76.6,1,

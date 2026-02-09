@@ -30,7 +30,7 @@ POINTS_VIDEO_PATH = os.getenv("POINTS_VIDEO_PATH", "data/alert_points/points_vid
 VIDEO_PATH = os.getenv("VIDEO_PATH", "data/samples/video_test3.mp4")
 
 # Procesar 1 de cada N frames (para performance)
-VIDEO_EVERY_N = int(os.getenv("VIDEO_EVERY_N", "30"))
+VIDEO_EVERY_N = int(os.getenv("VIDEO_EVERY_N", "150"))
 
 # Logs: se guarda en <raíz_proyecto>/logs/
 ROOT_DIR = Path(__file__).resolve().parents[1]  # .../<repo>/src/main_video.py -> .../<repo>
